@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_state.dart';
 import '../../core/theme.dart';
+import '../auth/login_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -45,7 +47,7 @@ class ProfileScreen extends StatelessWidget {
                     height: 100,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: LinearGradient(
+                      gradient: const LinearGradient(
                         colors: [T.classic, T.timeAttack],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -158,10 +160,48 @@ class ProfileScreen extends StatelessWidget {
                   ],
                 ),
               ),
+
+              const SizedBox(height: 56),
+
+              // Logout Button
+              GestureDetector(
+                onTap: () => _logout(context),
+                child: Container(
+                  height: 64,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white10, width: 2),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.logout_rounded, color: T.timeAttack, size: 24),
+                      const SizedBox(width: 12),
+                      Text(
+                        'LOGOUT',
+                        style: T.display(20).copyWith(color: T.timeAttack),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _logout(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isLoggedIn', false);
+    if (!context.mounted) return;
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
+      (route) => false,
     );
   }
 }

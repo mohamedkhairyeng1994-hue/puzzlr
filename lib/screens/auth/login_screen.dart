@@ -87,9 +87,9 @@ class _LoginScreenState extends State<LoginScreen>
       _error = null;
     });
     await Future.delayed(const Duration(milliseconds: 1200));
-    // Generate fake OTP
-    _fakeOtp = (1000 + Random().nextInt(8999)).toString();
-    debugPrint('🔐 OTP (dev only): $_fakeOtp');
+    // Set static OTP for testing
+    _fakeOtp = '0000';
+    debugPrint('🔐 OTP (static): $_fakeOtp');
     if (!mounted) return;
     setState(() {
       _loading = false;
