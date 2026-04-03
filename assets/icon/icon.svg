@@ -1,0 +1,46 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0A0D2E"/>
+      <stop offset="100%" style="stop-color:#050714"/>
+    </linearGradient>
+    <linearGradient id="tile1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#818CF8"/>
+      <stop offset="100%" style="stop-color:#6366F1"/>
+    </linearGradient>
+    <linearGradient id="tile2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366F1"/>
+      <stop offset="100%" style="stop-color:#4F46E5"/>
+    </linearGradient>
+    <linearGradient id="tile3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4F46E5"/>
+      <stop offset="100%" style="stop-color:#34D399"/>
+    </linearGradient>
+    <linearGradient id="tile4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#34D399"/>
+      <stop offset="100%" style="stop-color:#10B981"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <!-- Background rounded square -->
+  <rect width="1024" height="1024" rx="230" ry="230" fill="url(#bg)"/>
+  <!-- 3x3 grid: gap=40, tile size=240, start x=112, y=112 -->
+  <!-- Row 1 -->
+  <!-- Empty slot top-left -->
+  <rect x="112" y="112" width="240" height="240" rx="44" fill="#0D1130" opacity="0.6"/>
+  <rect x="392" y="112" width="240" height="240" rx="44" fill="url(#tile1)" filter="url(#glow)" opacity="0.92"/>
+  <rect x="672" y="112" width="240" height="240" rx="44" fill="url(#tile2)" opacity="0.92"/>
+  <!-- Row 2 -->
+  <rect x="112" y="392" width="240" height="240" rx="44" fill="url(#tile2)" opacity="0.92"/>
+  <rect x="392" y="392" width="240" height="240" rx="44" fill="url(#tile3)" filter="url(#glow)" opacity="0.92"/>
+  <rect x="672" y="392" width="240" height="240" rx="44" fill="url(#tile3)" opacity="0.85"/>
+  <!-- Row 3 -->
+  <rect x="112" y="672" width="240" height="240" rx="44" fill="url(#tile3)" opacity="0.85"/>
+  <rect x="392" y="672" width="240" height="240" rx="44" fill="url(#tile4)" opacity="0.92"/>
+  <rect x="672" y="672" width="240" height="240" rx="44" fill="url(#tile4)" filter="url(#glow)" opacity="0.92"/>
+  <!-- Highlight on first tile (shimmer) -->
+  <ellipse cx="470" cy="170" rx="70" ry="35" fill="white" opacity="0.12"/>
+</svg>
