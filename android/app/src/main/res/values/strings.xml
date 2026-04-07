@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Replace with your actual Play Games Services App ID -->
+    <string name="app_id">303855039521</string>
+</resources>
