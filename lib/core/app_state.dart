@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/puzzle_model.dart';
+import '../services/api_client.dart';
+import '../services/daily_service.dart';
+import '../services/profile_service.dart';
+import '../services/solve_service.dart';
 import 'theme.dart';
 
 // ── Leaderboard Entry ─────────────────────────────────────────────────────────
@@ -44,6 +48,18 @@ class Achievement {
 // ── AppState ──────────────────────────────────────────────────────────────────
 
 class AppState extends ChangeNotifier {
+  AppState({
+    ProfileService? profileService,
+    SolveService? solveService,
+    DailyService? dailyService,
+  })  : _profileService = profileService ?? ProfileService(),
+        _solveService = solveService ?? SolveService(),
+        _dailyService = dailyService ?? DailyService();
+
+  final ProfileService _profileService;
+  final SolveService _solveService;
+  final DailyService _dailyService;
+
   // ── Achievements ────────────────────────────────────────────────────────────
   final List<Achievement> achievements = [
     Achievement(
@@ -139,7 +155,7 @@ class AppState extends ChangeNotifier {
   int totalSolved = 0;
   Map<String, int> bestMoves = {};
   bool hasWonDuel = false;
-  
+
   // Tries system
   int triesLeft = 5;
   DateTime? lastTriesDate;
@@ -148,15 +164,38 @@ class AppState extends ChangeNotifier {
   int flames = 0;
 
   // ── Daily Puzzle Stage System ───────────────────────────────────────────────
-  // 0 = none done, 1 = easy done, 2 = medium done, 3 = all done
   int dailyStage = 0;
-  // Per-stage results: moves & seconds for today's completed stages
-  Map<String, int> dailyMoves = {}; // 'easy', 'medium', 'hard'
+  Map<String, int> dailyMoves = {};
   Map<String, int> dailyTimes = {};
-  String? dailyStageDate; // ISO date string to detect day change
+  String? dailyStageDate;
+
+  // ── User/session fields ─────────────────────────────────────────────────────
+  String? userName;
+  String? userEmail;
+  int? userId;
+
+  bool get isSignedIn => ApiClient.instance.isAuthenticated;
 
   // ── Load / Save ─────────────────────────────────────────────────────────────
+  /// Loads the token, then either fetches the profile from the backend
+  /// (source of truth) or reads the last cached snapshot for offline use.
   Future<void> load() async {
+    await ApiClient.instance.loadToken();
+    await _loadCacheFromPrefs();
+
+    if (ApiClient.instance.isAuthenticated) {
+      try {
+        final profile = await _profileService.fetch();
+        _applyProfile(profile);
+        await _saveCacheToPrefs();
+      } catch (_) {
+        // Offline: keep cached values
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> _loadCacheFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     streak = prefs.getInt('streak') ?? 0;
     totalSolved = prefs.getInt('totalSolved') ?? 0;
@@ -164,9 +203,7 @@ class AppState extends ChangeNotifier {
     hasWonDuel = prefs.getBool('hasWonDuel') ?? false;
 
     final lastStr = prefs.getString('lastDaily');
-    if (lastStr != null) {
-      lastDailyDate = DateTime.tryParse(lastStr);
-    }
+    if (lastStr != null) lastDailyDate = DateTime.tryParse(lastStr);
 
     bestMoves = {
       'easy': prefs.getInt('bestMovesEasy') ?? 99999,
@@ -180,14 +217,10 @@ class AppState extends ChangeNotifier {
     }
 
     final triesStr = prefs.getString('lastTriesDate');
-    if (triesStr != null) {
-      lastTriesDate = DateTime.tryParse(triesStr);
-    }
+    if (triesStr != null) lastTriesDate = DateTime.tryParse(triesStr);
     triesLeft = prefs.getInt('triesLeft') ?? 5;
     flames = prefs.getInt('flames') ?? 0;
-    _checkTriesRefill();
 
-    // Daily stage system
     dailyStage = prefs.getInt('dailyStage') ?? 0;
     dailyStageDate = prefs.getString('dailyStageDate');
     dailyMoves = {
@@ -202,10 +235,12 @@ class AppState extends ChangeNotifier {
     };
     _checkDailyStageReset();
 
-    notifyListeners();
+    userId = prefs.getInt('userId');
+    userName = prefs.getString('userName');
+    userEmail = prefs.getString('userEmail');
   }
 
-  Future<void> save() async {
+  Future<void> _saveCacheToPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('streak', streak);
     await prefs.setInt('totalSolved', totalSolved);
@@ -217,17 +252,17 @@ class AppState extends ChangeNotifier {
     await prefs.setInt('bestMovesEasy', bestMoves['easy'] ?? 99999);
     await prefs.setInt('bestMovesMedium', bestMoves['medium'] ?? 99999);
     await prefs.setInt('bestMovesHard', bestMoves['hard'] ?? 99999);
-    final unlockedIds = achievements
-        .where((a) => a.unlocked)
-        .map((a) => a.id)
-        .toList();
+
+    final unlockedIds =
+        achievements.where((a) => a.unlocked).map((a) => a.id).toList();
     await prefs.setStringList('achievements', unlockedIds);
+
     await prefs.setInt('triesLeft', triesLeft);
     await prefs.setInt('flames', flames);
     if (lastTriesDate != null) {
       await prefs.setString('lastTriesDate', lastTriesDate!.toIso8601String());
     }
-    // Daily stage
+
     await prefs.setInt('dailyStage', dailyStage);
     if (dailyStageDate != null) {
       await prefs.setString('dailyStageDate', dailyStageDate!);
@@ -238,9 +273,77 @@ class AppState extends ChangeNotifier {
     await prefs.setInt('dailyTimeEasy', dailyTimes['easy'] ?? 0);
     await prefs.setInt('dailyTimeMedium', dailyTimes['medium'] ?? 0);
     await prefs.setInt('dailyTimeHard', dailyTimes['hard'] ?? 0);
+
+    if (userId != null) await prefs.setInt('userId', userId!);
+    if (userName != null) await prefs.setString('userName', userName!);
+    if (userEmail != null) await prefs.setString('userEmail', userEmail!);
   }
 
-  // ── Record solve ─────────────────────────────────────────────────────────────
+  /// Kept for backwards compatibility with existing call sites.
+  Future<void> save() => _saveCacheToPrefs();
+
+  /// Applies a profile payload from the backend.
+  void _applyProfile(Map<String, dynamic> p) {
+    userId = _asInt(p['id']);
+    userName = p['name'] as String?;
+    userEmail = p['email'] as String?;
+
+    streak = _asInt(p['streak']) ?? 0;
+    totalSolved = _asInt(p['total_solved']) ?? 0;
+    flames = _asInt(p['flames']) ?? 0;
+    triesLeft = _asInt(p['tries_left']) ?? 5;
+    hasWonDuel = p['has_won_duel'] == true;
+    dailyCompletedToday = p['daily_completed_today'] == true;
+    dailyStage = _asInt(p['daily_stage']) ?? 0;
+
+    lastDailyDate = _asDate(p['last_daily_date']);
+    lastTriesDate = _asDate(p['last_tries_date']);
+    dailyStageDate = p['daily_stage_date'] as String?;
+
+    final bm = p['best_moves'];
+    if (bm is Map) {
+      bestMoves = {
+        'easy': _asInt(bm['easy']) ?? 99999,
+        'medium': _asInt(bm['medium']) ?? 99999,
+        'hard': _asInt(bm['hard']) ?? 99999,
+      };
+    }
+
+    final unlocked = (p['achievements'] as List?)?.cast<String>() ?? const [];
+    for (final a in achievements) {
+      a.unlocked = unlocked.contains(a.id);
+    }
+  }
+
+  static int? _asInt(dynamic v) {
+    if (v is int) return v;
+    if (v is String) return int.tryParse(v);
+    if (v is num) return v.toInt();
+    return null;
+  }
+
+  static DateTime? _asDate(dynamic v) {
+    if (v is String && v.isNotEmpty) return DateTime.tryParse(v);
+    return null;
+  }
+
+  // ── Authentication hooks ────────────────────────────────────────────────────
+  Future<void> onAuthenticated(Map<String, dynamic> user) async {
+    userId = _asInt(user['id']);
+    userName = user['name'] as String?;
+    userEmail = user['email'] as String?;
+    await load();
+  }
+
+  Future<void> signOut() async {
+    await ApiClient.instance.setToken(null);
+    userId = null;
+    userName = null;
+    userEmail = null;
+    notifyListeners();
+  }
+
+  // ── Record solve ────────────────────────────────────────────────────────────
   Future<void> recordSolve({
     required Difficulty d,
     required int moves,
@@ -250,16 +353,14 @@ class AppState extends ChangeNotifier {
     bool isCustomPhoto = false,
     bool isDaily = false,
   }) async {
+    // Local optimistic update so UI responds immediately.
     totalSolved++;
-
     final key = d.name;
     if (!bestMoves.containsKey(key) || moves < bestMoves[key]!) {
       bestMoves[key] = moves;
     }
 
-    // Check achievements
     _unlock('first_steps');
-
     if (seconds < 30) _unlock('speed_demon');
     if (d == Difficulty.easy && moves <= 20) _unlock('minimalist');
     if (!usedPowerups) _unlock('powerless');
@@ -267,11 +368,8 @@ class AppState extends ChangeNotifier {
     if (totalSolved >= 25) _unlock('marathon');
     if (isTimeAttack) _unlock('time_warrior');
     if (isCustomPhoto) _unlock('custom_creator');
-    if (d == Difficulty.easy && moves <= d.starA) _unlock('perfectionist');
-    if (d == Difficulty.medium && moves <= d.starA) _unlock('perfectionist');
-    if (d == Difficulty.hard && moves <= d.starA) _unlock('perfectionist');
+    if (moves <= d.starA) _unlock('perfectionist');
 
-    // Add Flame Rewards
     if (moves <= d.starA) {
       flames += 3;
     } else if (moves <= d.starB) {
@@ -284,17 +382,47 @@ class AppState extends ChangeNotifier {
       await recordDailyComplete();
     }
 
-    await save();
     notifyListeners();
+
+    if (ApiClient.instance.isAuthenticated) {
+      try {
+        final res = await _solveService.submit(
+          difficulty: d.name,
+          moves: moves,
+          seconds: seconds,
+          usedPowerups: usedPowerups,
+          isTimeAttack: isTimeAttack,
+          isCustomPhoto: isCustomPhoto,
+          isDaily: isDaily,
+        );
+        final profile = res['profile'];
+        if (profile is Map<String, dynamic>) {
+          _applyProfile(profile);
+          notifyListeners();
+        }
+      } catch (_) {
+        // Keep optimistic local state
+      }
+    }
+
+    await _saveCacheToPrefs();
   }
 
   Future<void> spendFlames(int amount) async {
-    if (flames >= amount) {
-      flames -= amount;
-      triesLeft++; // grant a try instantly
-      await save();
-      notifyListeners();
+    if (flames < amount) return;
+
+    flames -= amount;
+    triesLeft++;
+    notifyListeners();
+
+    if (ApiClient.instance.isAuthenticated) {
+      try {
+        final profile = await _profileService.spendFlames(amount);
+        _applyProfile(profile);
+        notifyListeners();
+      } catch (_) {}
     }
+    await _saveCacheToPrefs();
   }
 
   // ── Daily streak ────────────────────────────────────────────────────────────
@@ -304,29 +432,17 @@ class AppState extends ChangeNotifier {
 
     if (lastDailyDate == null) return;
 
-    final lastDay = DateTime(
-      lastDailyDate!.year,
-      lastDailyDate!.month,
-      lastDailyDate!.day,
-    );
+    final lastDay =
+        DateTime(lastDailyDate!.year, lastDailyDate!.month, lastDailyDate!.day);
     final diff = today.difference(lastDay).inDays;
 
-    if (diff == 0) {
-      // Same day — streak unchanged
-    } else if (diff == 1) {
-      // Yesterday — streak still valid but not yet incremented
-    } else {
-      // Gap of 2+ days — reset streak
+    if (diff > 1) {
       streak = 0;
-      await save();
     }
-
-    // Reset dailyCompletedToday if it's a new day
     if (diff > 0) {
       dailyCompletedToday = false;
-      await save();
     }
-
+    await _saveCacheToPrefs();
     notifyListeners();
   }
 
@@ -357,7 +473,7 @@ class AppState extends ChangeNotifier {
     if (streak >= 3) _unlock('streak3');
     if (streak >= 7) _unlock('streak7');
 
-    await save();
+    await _saveCacheToPrefs();
     notifyListeners();
   }
 
@@ -365,25 +481,21 @@ class AppState extends ChangeNotifier {
   Future<void> recordDuelWin() async {
     hasWonDuel = true;
     _unlock('duel_win');
-    await save();
+    await _saveCacheToPrefs();
     notifyListeners();
   }
 
   // ── Daily Stage System ──────────────────────────────────────────────────────
-
-  /// The difficulty for the current daily stage.
   Difficulty? get currentDailyDifficulty {
-    if (dailyStage >= 3) return null; // all done
+    if (dailyStage >= 3) return null;
     return Difficulty.values[dailyStage];
   }
 
-  /// Seed for daily puzzle, deterministic per date.
   int get dailySeed {
     final now = DateTime.now();
     return now.year * 10000 + now.month * 100 + now.day;
   }
 
-  /// Record completion of the current daily stage.
   Future<void> recordDailyStage({
     required Difficulty d,
     required int moves,
@@ -391,23 +503,34 @@ class AppState extends ChangeNotifier {
   }) async {
     dailyMoves[d.name] = moves;
     dailyTimes[d.name] = seconds;
-    dailyStage = d.index + 1; // advance to next stage
+    dailyStage = d.index + 1;
 
-    // Award flames for daily completion
     flames += 2;
 
-    // If all 3 stages done, mark daily as complete for streak
     if (dailyStage >= 3) {
       dailyCompletedToday = true;
-      flames += 5; // Bonus for full completion
+      flames += 5;
       await recordDailyComplete();
     }
 
-    final todayStr = _todayString();
-    dailyStageDate = todayStr;
-
-    await save();
+    dailyStageDate = _todayString();
     notifyListeners();
+
+    if (ApiClient.instance.isAuthenticated) {
+      try {
+        final res = await _dailyService.complete(
+          difficulty: d.name,
+          moves: moves,
+          seconds: seconds,
+        );
+        final profile = res['profile'];
+        if (profile is Map<String, dynamic>) {
+          _applyProfile(profile);
+          notifyListeners();
+        }
+      } catch (_) {}
+    }
+    await _saveCacheToPrefs();
   }
 
   void _checkDailyStageReset() {
@@ -425,13 +548,15 @@ class AppState extends ChangeNotifier {
     return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 
-  /// Total moves + time across all completed daily stages.
   int get dailyTotalMoves =>
-      (dailyMoves['easy'] ?? 0) + (dailyMoves['medium'] ?? 0) + (dailyMoves['hard'] ?? 0);
+      (dailyMoves['easy'] ?? 0) +
+      (dailyMoves['medium'] ?? 0) +
+      (dailyMoves['hard'] ?? 0);
   int get dailyTotalTime =>
-      (dailyTimes['easy'] ?? 0) + (dailyTimes['medium'] ?? 0) + (dailyTimes['hard'] ?? 0);
+      (dailyTimes['easy'] ?? 0) +
+      (dailyTimes['medium'] ?? 0) +
+      (dailyTimes['hard'] ?? 0);
 
-  /// Generate a simulated per-stage leaderboard with the player's score injected.
   List<LeaderboardEntry> getDailyStageLeaderboard({
     required Difficulty d,
     required int playerMoves,
@@ -446,7 +571,6 @@ class AppState extends ChangeNotifier {
       'MindMaze', 'PuzzleStar', 'TileForce', 'SlydeKing',
     ];
 
-    // Generate ranges appropriate for each difficulty
     final moveBase = const [10, 30, 60][d.index];
     final moveRange = const [40, 100, 200][d.index];
     final timeBase = const [20, 50, 100][d.index];
@@ -463,9 +587,8 @@ class AppState extends ChangeNotifier {
       ));
     }
 
-    // Add the player
     entries.add(LeaderboardEntry(
-      name: 'You',
+      name: userName ?? 'You',
       totalMoves: playerMoves,
       totalSeconds: playerSeconds,
       isPlayer: true,
@@ -480,7 +603,6 @@ class AppState extends ChangeNotifier {
     return entries;
   }
 
-  /// Get just the player's rank for a stage.
   int getPlayerDailyRank({
     required Difficulty d,
     required int playerMoves,
@@ -498,42 +620,38 @@ class AppState extends ChangeNotifier {
   }
 
   // ── Internal ────────────────────────────────────────────────────────────────
-  void _checkTriesRefill() {
-    final now = DateTime.now();
-    if (lastTriesDate == null) {
-      lastTriesDate = now;
-      triesLeft = 5;
-    } else {
-      final today = DateTime(now.year, now.month, now.day);
-      final lastDay = DateTime(lastTriesDate!.year, lastTriesDate!.month, lastTriesDate!.day);
-      if (today.difference(lastDay).inDays >= 1) {
-        lastTriesDate = now;
-        triesLeft = 5;
-      }
-    }
-  }
-
   Future<void> useTry() async {
-    _checkTriesRefill();
     if (triesLeft > 0) {
       triesLeft--;
-      await save();
       notifyListeners();
     }
+    if (ApiClient.instance.isAuthenticated) {
+      try {
+        final profile = await _profileService.useTry();
+        _applyProfile(profile);
+        notifyListeners();
+      } catch (_) {}
+    }
+    await _saveCacheToPrefs();
   }
 
   Future<void> watchAdForTry() async {
-    // Fake ad watch logic - instant for now
     triesLeft++;
-    await save();
     notifyListeners();
+    if (ApiClient.instance.isAuthenticated) {
+      try {
+        final profile = await _profileService.watchAdForTry();
+        _applyProfile(profile);
+        notifyListeners();
+      } catch (_) {}
+    }
+    await _saveCacheToPrefs();
   }
 
   void _unlock(String id) {
     final achievement = achievements.where((a) => a.id == id).firstOrNull;
     if (achievement != null && !achievement.unlocked) {
       achievement.unlocked = true;
-      // Save is called by the caller
     }
   }
 

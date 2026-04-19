@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "588159562475",
+    "project_id": "puzzlr-59345",
+    "storage_bucket": "puzzlr-59345.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:588159562475:android:6af528ec9e747c3def84ae",
+        "android_client_info": {
+          "package_name": "com.games.puzzlr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC7GRwuwVtNgdNrqv3oufnz2pKA0pdULkQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

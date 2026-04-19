@@ -5,11 +5,12 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/app_state.dart';
-import 'screens/home/home_screen.dart';
-import 'screens/auth/onboarding_screen.dart';
-import 'screens/auth/login_screen.dart';
-import 'widgets/logo_widget.dart';
 import 'core/theme.dart';
+import 'screens/auth/login_screen.dart';
+import 'screens/auth/onboarding_screen.dart';
+import 'screens/home/home_screen.dart';
+import 'services/api_client.dart';
+import 'widgets/logo_widget.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -81,7 +82,9 @@ class _AppRouterState extends State<_AppRouter> {
   Future<void> _route() async {
     final prefs = await SharedPreferences.getInstance();
     final seen = prefs.getBool('onboardingSeen') ?? false;
-    final loggedIn = prefs.getBool('isLoggedIn') ?? false;
+    await ApiClient.instance.loadToken();
+    final loggedIn = ApiClient.instance.isAuthenticated;
+
     if (!mounted) return;
 
     Widget dest;
