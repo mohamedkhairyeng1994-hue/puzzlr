@@ -163,6 +163,9 @@ class AppState extends ChangeNotifier {
   // Currency
   int flames = 0;
 
+  // Rando Game progress (how many rando levels solved, 0..30)
+  int randoSolved = 0;
+
   // ── Daily Puzzle Stage System ───────────────────────────────────────────────
   int dailyStage = 0;
   Map<String, int> dailyMoves = {};
@@ -220,6 +223,7 @@ class AppState extends ChangeNotifier {
     if (triesStr != null) lastTriesDate = DateTime.tryParse(triesStr);
     triesLeft = prefs.getInt('triesLeft') ?? 5;
     flames = prefs.getInt('flames') ?? 0;
+    randoSolved = prefs.getInt('randoSolved') ?? 0;
 
     dailyStage = prefs.getInt('dailyStage') ?? 0;
     dailyStageDate = prefs.getString('dailyStageDate');
@@ -259,6 +263,7 @@ class AppState extends ChangeNotifier {
 
     await prefs.setInt('triesLeft', triesLeft);
     await prefs.setInt('flames', flames);
+    await prefs.setInt('randoSolved', randoSolved);
     if (lastTriesDate != null) {
       await prefs.setString('lastTriesDate', lastTriesDate!.toIso8601String());
     }
@@ -405,6 +410,13 @@ class AppState extends ChangeNotifier {
       }
     }
 
+    await _saveCacheToPrefs();
+  }
+
+  Future<void> recordRandoSolve({required int level}) async {
+    if (level > randoSolved) randoSolved = level;
+    flames += 2;
+    notifyListeners();
     await _saveCacheToPrefs();
   }
 

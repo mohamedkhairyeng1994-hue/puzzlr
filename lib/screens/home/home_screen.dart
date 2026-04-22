@@ -8,6 +8,7 @@ import '../../widgets/logo_widget.dart';
 import '../../widgets/game_mode_button.dart';
 import '../daily/daily_screen.dart';
 import '../levels/levels_screen.dart';
+import '../rando/rando_levels_screen.dart';
 import '../settings/settings_screen.dart';
 import '../profile/profile_screen.dart';
 import '../multiplayer/multiplayer_setup_screen.dart';
@@ -203,6 +204,32 @@ class HomeScreen extends StatelessWidget {
                           );
                         },
                       ),
+                      const SizedBox(height: 24),
+                      GameModeButton(
+                        title: 'RANDO GAME',
+                        subtitle: appState.randoSolved > 0
+                            ? '${appState.randoSolved}/30 levels · mixed challenges'
+                            : 'Every level a different game',
+                        color: const Color(0xFF9C27B0),
+                        icon: Icons.shuffle_rounded,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            PageRouteBuilder(
+                              transitionDuration:
+                                  const Duration(milliseconds: 400),
+                              pageBuilder: (ctx, a, sec) =>
+                                  const RandoLevelsScreen(),
+                              transitionsBuilder: (ctx, a, sec, child) =>
+                                  FadeTransition(
+                                opacity: CurvedAnimation(
+                                    parent: a, curve: Curves.easeOut),
+                                child: child,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
